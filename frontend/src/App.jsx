@@ -9,6 +9,7 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [file, setFile] = useState(null);
   const [useCloud, setUseCloud] = useState(false);
+  const [brainMode, setBrainMode] = useState('reader'); // 'reader' or 'agent'
   const [uploading, setUploading] = useState(false);
 
   useEffect(() => {
@@ -26,6 +27,7 @@ function App() {
     try {
       const res = await fetch('http://localhost:8000/upload', { method: 'POST', body: formData });
       const data = await res.json();
+      setMessages([]); // 🚨 CLEAR CHAT when new PDF is uploaded
       alert(data.message);
     } catch (err) {
       alert('Upload failed');
@@ -45,9 +47,11 @@ function App() {
       const formData = new FormData();
       formData.append('message', input);
       formData.append('use_cloud', useCloud ? 'true' : 'false');
-      const res = await fetch('http://localhost:8000/chat', { method: 'POST', body: formData });
+      
+      const endpoint = brainMode === 'agent' ? '/agent-chat' : '/chat';
+      const res = await fetch(`http://localhost:8000${endpoint}`, { method: 'POST', body: formData });
       const data = await res.json();
-      setMessages((prev) => [...prev, { role: 'bot', content: data.response }]);
+      setMessages((prev) => [...prev, { role: brainMode.toUpperCase() + '-BOT', content: data.response }]);
     } catch (err) {
       setMessages((prev) => [...prev, { role: 'bot', content: 'Error: Backend dead.' }]);
     } finally {
@@ -71,14 +75,39 @@ function App() {
     }
   };
 
+  const handleRunCrew = async () => {
+    const topic = prompt("What topic should the Crew research?", "Future of AI");
+    if (!topic) return;
+    setLoading(true);
+    try {
+      const formData = new FormData();
+      formData.append('topic', topic);
+      const res = await fetch('http://localhost:8000/run-crew', { method: 'POST', body: formData });
+      const data = await res.json();
+      setMessages((prev) => [...prev, { role: 'CREW', content: data.response }]);
+    } catch (err) {
+      setMessages((prev) => [...prev, { role: 'CREW', content: 'Crew failed to assemble.' }]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   if (!user) {
     return (
       <div style={{ textAlign: 'center', marginTop: '100px', fontFamily: 'serif' }}>
         <h1>BYOC (Badly Yielded Old Code)</h1>
         <p>Login to my masterpiece.</p>
-        <button onClick={signInWithGoogle} style={{ padding: '10px 20px', fontSize: '20px' }}>
-          LOGIN WITH GOOGLE
-        </button>
+        <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
+          <button onClick={signInWithGoogle} style={{ padding: '10px 20px', fontSize: '20px' }}>
+            LOGIN WITH GOOGLE
+          </button>
+          <button 
+            onClick={() => setUser({ displayName: 'Guest (Offline Mode)' })} 
+            style={{ padding: '10px 20px', fontSize: '20px', backgroundColor: '#ccc' }}
+          >
+            OFFLINE GUEST MODE
+          </button>
+        </div>
       </div>
     );
   }
@@ -108,11 +137,27 @@ function App() {
           <button onClick={() => handleShortcut('summarize')} style={{ width: '100%', marginBottom: '5px' }}>SUMMARIZE</button>
           <button onClick={() => handleShortcut('quiz')} style={{ width: '100%', marginBottom: '5px' }}>QUIZ ME</button>
           <button onClick={() => handleShortcut('explain')} style={{ width: '100%', marginBottom: '5px' }}>EXPLAIN</button>
+          <button onClick={handleRunCrew} style={{ width: '100%', marginBottom: '5px', backgroundColor: '#4caf50', color: 'white' }}>RESEARCH CREW</button>
           <hr />
           <label>
             <input type="checkbox" checked={useCloud} onChange={(e) => setUseCloud(e.target.checked)} />
             USE CLOUD??
           </label>
+          <hr />
+          <h3>BRAIN MODE</h3>
+          <select 
+            value={brainMode} 
+            onChange={(e) => setBrainMode(e.target.value)}
+            style={{ width: '100%', padding: '5px', backgroundColor: brainMode === 'agent' ? '#ffeb3b' : 'white' }}
+          >
+            <option value="reader">PDF Reader (RAG)</option>
+            <option value="agent">Autonomous Agent (Search)</option>
+          </select>
+          {brainMode === 'agent' && (
+            <p style={{ fontSize: '10px', color: 'red', marginTop: '5px' }}>
+              ⚠️ WARNING: Agent will think for itself! Watch the terminal!
+            </p>
+          )}
         </div>
 
         <div style={{ flex: 1, border: '2px solid green', padding: '10px', backgroundColor: 'white' }}>
